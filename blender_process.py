@@ -40,7 +40,6 @@ def pipeline_logic():
         # Access vertex data
         attr_node = mat.node_tree.nodes.new(type="ShaderNodeAttribute")
         attr_node.attribute_name = color_layer_name
-        # attr_node.location = (-300, 0) # Move node to left for clarity
 
         # Link the Attribute Color output to the Base Color input of the Shader
         if bsdf:
@@ -48,8 +47,33 @@ def pipeline_logic():
 
         # Assign the material to the object
         obj.data.materials.append(mat)
+    
+    # 4. Geometry Processing (Optimization & Cleanup)
 
-    # 4. Export
+    # Switch to EDIT mode
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+
+    # 4.1. Merge Vertices
+    bpy.ops.mesh.remove_doubles(threshold=0.001)
+
+    # 4.2. Manifold Check (Auto-fill Holes)
+    bpy.ops.mesh.fill_holes(sides=4)
+
+    # 4.3. Reduce poly count 
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    mod = obj.modifiers.new(name="Decimate", type='DECIMATE')
+    mod.ratio = 0.1
+        
+    bpy.ops.object.modifier_apply(modifier="Decimate")
+    
+    # 4.3. Simple Tri-to-Quad (Fast Optimization)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.tris_convert_to_quads()
+
+    # 5. Export
     print(f"Exporting to: {OUTPUT_FILE}")
     bpy.ops.export_scene.gltf(filepath=OUTPUT_FILE)
 
