@@ -22,87 +22,91 @@ def pipeline_logic():
         print("No object imported!")
         return
 
-    obj = bpy.context.selected_objects[0]
-    bpy.context.view_layer.objects.active = obj # Set the active object
+    target_obj = bpy.context.selected_objects[0]
+    bpy.context.view_layer.objects.active = target_obj # Set the active object
 
-    # 3. Handle Vertex Colors
-    if not obj.data.materials:
-        # Create a new material
-        mat = bpy.data.materials.new(name="VertexColorMat")
-        mat.use_nodes = True
-        bsdf = mat.node_tree.nodes.get("Principled BSDF")
+    # 3. Backup High Poly (source)
+    source_obj = target_obj.copy()
+    source_obj.data = target_obj.data.copy()
+    source_obj.name = "Source_HighPoly"
+    bpy.context.collection.objects.link(source_obj)
 
-        # Check if the mesh has color attributes
-        color_layer_name = "Col"
-        if hasattr(obj.data, "color_attributes") and obj.data.color_attributes:
-            color_layer_name = obj.data.color_attributes.active.name 
-        
-        # Access vertex data
-        attr_node = mat.node_tree.nodes.new(type="ShaderNodeAttribute")
-        attr_node.attribute_name = color_layer_name
+    if not source_obj.data.color_attributes:
+        print("!!! WARNING: Source OBJ has no Vertex Colors! Output will be white.")
+    else:
+        print(f"Source Colors Detected: {[a.name for a in source_obj.data.color_attributes]}")
+    
+    source_obj.hide_viewport = True
 
-        # Link the Attribute Color output to the Base Color input of the Shader
-        if bsdf:
-            mat.node_tree.links.new(attr_node.outputs["Color"], bsdf.inputs["Base Color"])
-
-        # Assign the material to the object
-        obj.data.materials.append(mat)
+    # Reset Target Selection
+    bpy.ops.object.select_all(action='DESELECT')
+    target_obj.select_set(True)
+    bpy.context.view_layer.objects.active = target_obj
     
     # 4. Geometry Processing (Optimization & Cleanup)
 
-    # Switch to EDIT mode
+    # 4.1. Pre-Decimate
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-
-    # 4.1. Merge Vertices
     bpy.ops.mesh.remove_doubles(threshold=0.001)
+    bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
 
-    # 4.2. Manifold Check (Auto-fill Holes)
-    bpy.ops.mesh.fill_holes(sides=4)
-
-    # # Voxel Remesh
-    # bpy.ops.object.mode_set(mode='OBJECT')
-    
-    # # Add Remesh Modifier
-    # remesh = obj.modifiers.new(name="VoxelRemesh", type='REMESH')
-    # remesh.mode = 'VOXEL'
-    # remesh.voxel_size = 0.01  # Smaller = More Detail, Higher Poly Count
-    # remesh.adaptivity = 0.0
-    
-    # bpy.ops.object.modifier_apply(modifier="VoxelRemesh")
-
-    # 4.3.1. Reduce poly count (Decimate)
+    # 4.2. Decimate
     bpy.ops.object.mode_set(mode='OBJECT')
-    mod = obj.modifiers.new(name="Decimate", type='DECIMATE')
+    mod = target_obj.modifiers.new(name="Decimate", type='DECIMATE')
     mod.ratio = 0.1
     bpy.ops.object.modifier_apply(modifier="Decimate")
 
-    # 4.3.2. Cleanup after Decimate
+    # 4.3. Post-Cleanup
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-
-    # Merge vertices
     bpy.ops.mesh.remove_doubles(threshold=0.001)
-    # Delete loose geometry (Fixes floating points/edges that Decimate left behind)
     bpy.ops.mesh.delete_loose()
-    # Dissolve degenerate (Fixes zero-area faces)
     bpy.ops.mesh.dissolve_degenerate(threshold=0.0001)
-    # Clear custom split normals from imported OBJs
-    try:
-        bpy.ops.mesh.customdata_custom_splitnormals_clear()
-    except AttributeError:
-        pass # In case the mesh doesn't have custom normals, ignore error
-    # Recalculate Normals (Ensure all faces point outward)
+    bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
     bpy.ops.mesh.normals_make_consistent(inside=False)
+
+    # 4.4. Validation
+    bpy.ops.object.mode_set(mode='OBJECT')
+    target_obj.data.validate(verbose=False, clean_customdata=True)
+
+    # 5. Data Transfer
+    if not target_obj.data.color_attributes:
+        target_obj.data.color_attributes.new(name="Target_Color", type='BYTE_COLOR', domain='CORNER')
     
-    # 4.4. Simple Tri-to-Quad (Fast Optimization)
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.tris_convert_to_quads()
+    target_layer_name = target_obj.data.color_attributes.active.name
+
+    dt_mod = target_obj.modifiers.new(name="ColorTransfer", type='DATA_TRANSFER')
+    dt_mod.object = source_obj 
+    dt_mod.use_loop_data = True 
+    dt_mod.data_types_loops = {'COLOR_CORNER'}
+    dt_mod.loop_mapping = 'NEAREST_POLYNOR'
+
+    bpy.ops.object.modifier_apply(modifier="ColorTransfer")
+
+    # 6. Material Setup
+    target_obj.data.materials.clear()
+
+    mat = bpy.data.materials.new(name="Final_VCol_Mat")
+    bsdf = mat.node_tree.nodes.get("Principled BSDF")
+
+    attr_node = mat.node_tree.nodes.new(type="ShaderNodeAttribute")
+    attr_node.attribute_name = target_layer_name 
+
+    if bsdf:
+        mat.node_tree.links.new(attr_node.outputs["Color"], bsdf.inputs["Base Color"])
+
+    target_obj.data.materials.append(mat)
  
-    # 5. Export
+    # 7. Final Export
+    bpy.data.objects.remove(source_obj, do_unlink=True)
+    
     print(f"Exporting to: {OUTPUT_FILE}")
-    bpy.ops.export_scene.gltf(filepath=OUTPUT_FILE)
+    bpy.ops.export_scene.gltf(
+        filepath=OUTPUT_FILE, 
+        export_apply=True, 
+        export_attributes=True
+    )
 
 if __name__ == "__main__":
     pipeline_logic()
