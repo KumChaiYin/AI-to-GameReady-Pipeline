@@ -1,7 +1,6 @@
 import bpy
 import sys
 import os
-import math
 
 argv = sys.argv
 argv = argv[argv.index("--") + 1:]
@@ -77,16 +76,48 @@ def pipeline_logic():
     remesh.voxel_size = 0.005 
     bpy.ops.object.modifier_apply(modifier="Remesh")
 
-    # 3.2. Decimate (Planar Mode)
+    # 3.2. Quadriflow (Smart Retopology)
+
+    # 3.2.1. Cleanup (Fix Non-Manifold Geometry)
+    target_obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_mode(type="VERT")
+    bpy.ops.mesh.select_all(action='SELECT')
+
+    bpy.ops.mesh.remove_doubles(threshold=0.001)
+    bpy.ops.mesh.fill_holes(sides=0) # Fill ALL holes, not just 4-sided ones (0 means unlimited)
+    bpy.ops.mesh.delete_loose()
+
+    # Quadriflow fails often if normals are flipped or inconsistent.
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+
     bpy.ops.object.mode_set(mode='OBJECT')
-    mod = target_obj.modifiers.new(name="Decimate", type='DECIMATE')
-    mod.ratio = 0.1
-    bpy.ops.object.modifier_apply(modifier="Decimate")
-    
-    # decimate = target_obj.modifiers.new(name="Decimate", type='DECIMATE')
-    # decimate.decimate_type = 'DISSOLVE' 
-    # decimate.angle_limit = math.radians(20) # preserve sharp corner (doesn't look good on the character)
-    # bpy.ops.object.modifier_apply(modifier="Decimate")
+
+    # 3.2.2. Quadriflow
+    print(f">>> Running Quadriflow on {target_obj.name}...")
+
+    # Check if mesh actually has data
+    if target_obj.data and len(target_obj.data.polygons) > 0:
+        try:
+            # NOTE: Quadriflow is blocking. Blender will freeze while this runs.
+            bpy.ops.object.quadriflow_remesh(
+                use_preserve_sharp=True, # this helps if voxel remesh kept edges
+                use_preserve_boundary=True, 
+                use_mesh_symmetry=False, 
+                mode='FACES', 
+                target_faces=10000
+            )
+            print(">>> Quadriflow Success.")
+            
+        except Exception as e:
+            print(f"Warning: Quadriflow failed or was cancelled ({e}). Using Decimate fallback.")
+            
+            decimate = target_obj.modifiers.new(name="Decimate_Fallback", type='DECIMATE')
+            decimate.ratio = 0.1
+            decimate.use_collapse_triangulate = True # Prevents n-gon issues in fallback
+            bpy.ops.object.modifier_apply(modifier="Decimate_Fallback")
+    else:
+        print("Error: Mesh is empty, cannot remesh.")
 
     # 4. UV Unwrap
     bpy.context.view_layer.objects.active = target_obj
