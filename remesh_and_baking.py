@@ -3,9 +3,16 @@ import sys
 import os
 
 argv = sys.argv
-argv = argv[argv.index("--") + 1:]
-INPUT_OBJ = argv[0]
-OUTPUT_GLB = argv[1]
+try:
+    if "--" in argv:
+        argv = argv[argv.index("--") + 1:]
+    else:
+        argv = []
+except ValueError:
+    pass
+
+INPUT_OBJ = argv[0] if len(argv) > 0 else "model.obj"
+OUTPUT_GLB = argv[1] if len(argv) > 1 else "output.glb"
 
 INPUT_DIR = os.path.dirname(INPUT_OBJ)
 SOURCE_TEXTURE = os.path.join(INPUT_DIR, "texture.png") 
@@ -50,7 +57,7 @@ def pipeline_logic():
             if node.type == 'TEX_IMAGE':
                 has_image = True
                 break
-        
+         
         if not has_image:
             print(f"Linking texture: {SOURCE_TEXTURE}")
             tex_node = mat.node_tree.nodes.new('ShaderNodeTexImage')
@@ -70,16 +77,15 @@ def pipeline_logic():
 
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    # 3.1. Voxel Remesh (Struxture)
+    # 3.1. Voxel Remesh
     remesh = target_obj.modifiers.new(name="Remesh", type='REMESH')
     remesh.mode = 'VOXEL'
     remesh.voxel_size = 0.005 
     bpy.ops.object.modifier_apply(modifier="Remesh")
 
-    # 3.2. Quadriflow (Smart Retopology)
+    # 3.2. Quadriflow
 
-    # 3.2.1. Cleanup (Fix Non-Manifold Geometry)
-    target_obj
+    # Cleanup (Fix Non-Manifold Geometry)
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_mode(type="VERT")
     bpy.ops.mesh.select_all(action='SELECT')
@@ -93,7 +99,6 @@ def pipeline_logic():
 
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    # 3.2.2. Quadriflow
     print(f">>> Running Quadriflow on {target_obj.name}...")
 
     # Check if mesh actually has data
@@ -101,23 +106,25 @@ def pipeline_logic():
         try:
             # NOTE: Quadriflow is blocking. Blender will freeze while this runs.
             bpy.ops.object.quadriflow_remesh(
-                use_preserve_sharp=True, # this helps if voxel remesh kept edges
+                use_preserve_sharp=True,
                 use_preserve_boundary=True, 
                 use_mesh_symmetry=False, 
                 mode='FACES', 
                 target_faces=10000
             )
             print(">>> Quadriflow Success.")
-            
+
         except Exception as e:
             print(f"Warning: Quadriflow failed or was cancelled ({e}). Using Decimate fallback.")
-            
             decimate = target_obj.modifiers.new(name="Decimate_Fallback", type='DECIMATE')
             decimate.ratio = 0.1
             decimate.use_collapse_triangulate = True # Prevents n-gon issues in fallback
             bpy.ops.object.modifier_apply(modifier="Decimate_Fallback")
     else:
         print("Error: Mesh is empty, cannot remesh.")
+
+    # 3.3. Shade Smooth
+    bpy.ops.object.shade_smooth()
 
     # 4. UV Unwrap
     bpy.context.view_layer.objects.active = target_obj
@@ -135,19 +142,27 @@ def pipeline_logic():
     if target_bsdf:
         target_bsdf.inputs["Roughness"].default_value = 0.7
     
+    # Image for Color
     bake_image = bpy.data.images.new("Final_Texture", width=1024, height=1024)
-    
     tex_image_node = target_mat.node_tree.nodes.new('ShaderNodeTexImage')
     tex_image_node.image = bake_image
-    target_mat.node_tree.nodes.active = tex_image_node
+    
+    # Image for Normal Map
+    bake_normal = bpy.data.images.new("Final_Normal", width=1024, height=1024)
+    bake_normal.colorspace_settings.name = 'Non-Color' 
+    
+    tex_normal_node = target_mat.node_tree.nodes.new('ShaderNodeTexImage')
+    tex_normal_node.image = bake_normal
 
+    # Prepare selection
     bpy.ops.object.select_all(action='DESELECT')
     source_obj.select_set(True)
     target_obj.select_set(True)
     bpy.context.view_layer.objects.active = target_obj
 
-    print(">>> Starting Bake (High to Low)...")
-    # Using 'DIFFUSE' with only 'COLOR' ensures we don't bake shadows/lighting
+    # --- Bake Color ---
+    print(">>> Baking Color...")
+    target_mat.node_tree.nodes.active = tex_image_node
     bpy.ops.object.bake(
         type='DIFFUSE',
         pass_filter={'COLOR'},
@@ -156,10 +171,27 @@ def pipeline_logic():
         target='IMAGE_TEXTURES'
     )
 
+    # --- Bake Normal ---
+    print(">>> Baking Normal...")
+    target_mat.node_tree.nodes.active = tex_normal_node
+    bpy.ops.object.bake(
+        type='NORMAL',
+        use_selected_to_active=True,
+        cage_extrusion=0.03,
+        target='IMAGE_TEXTURES'
+    )
+
+    # 6. Linking & Export
+    # Link Color
     if target_bsdf:
         target_mat.node_tree.links.new(tex_image_node.outputs["Color"], target_bsdf.inputs["Base Color"])
+        
+        # Link Normal Map
+        normal_map_node = target_mat.node_tree.nodes.new('ShaderNodeNormalMap')
+        target_mat.node_tree.links.new(tex_normal_node.outputs["Color"], normal_map_node.inputs["Color"])
+        target_mat.node_tree.links.new(normal_map_node.outputs["Normal"], target_bsdf.inputs["Normal"])
 
-    # 6. Export
+    # Export
     bpy.ops.object.select_all(action='DESELECT')
     source_obj.select_set(True)
     bpy.ops.object.delete()
