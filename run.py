@@ -1,6 +1,6 @@
 import subprocess
 import os
-import sys
+import argparse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -9,67 +9,78 @@ load_dotenv()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TRIPO_DIR = os.path.join(BASE_DIR, "TripoSR")
 
-BLENDER_SCRIPT = os.path.join(BASE_DIR, "blender_process.py")
-
-INPUT_IMG = os.path.join(BASE_DIR, "input_images", "character.png")
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
-
-if not os.path.exists(OUTPUT_DIR):
-    os.makedirs(OUTPUT_DIR)
+BLENDER_SCRIPT = os.path.join(BASE_DIR, "blender_scripts", "main_processor.py")
 
 BLENDER_EXE = os.getenv("BLENDER_PATH")
 
 if not BLENDER_EXE:
     raise ValueError("Please set BLENDER_PATH in your .env file")
 
-def run_pipeline():
+def run_pipeline(input_image_path, output_dir, mode):
+    abs_input_img = os.path.abspath(input_image_path)
+    abs_output_dir = os.path.abspath(output_dir)
+
+    if not os.path.exists(abs_output_dir):
+        os.makedirs(abs_output_dir)
+
     print(">>> Stage 1: Running AI Generation (TripoSR)...")
     
-    abs_input_img = os.path.abspath(INPUT_IMG)
-    abs_output_dir = os.path.abspath(OUTPUT_DIR)
-
-    tripo_args = [
+    tripo_cmd = [
         "python", "run.py",
         abs_input_img,
         "--output-dir", abs_output_dir,
     ]
 
-    # tripo_args = [
-    #     "python", "run.py",
-    #     abs_input_img,
-    #     "--output-dir", abs_output_dir,
-    #     "--bake-texture",
-    #     "--texture-resolution", "1024"
-    # ]
-    
-    # Executes the command "inside" the TripoSR folder.
-    subprocess.run(tripo_args, cwd=TRIPO_DIR, check=True)
+    if mode == "animatable":
+        print("    -> Mode is Animatable: Enabling Texture Baking in TripoSR.")
+        tripo_cmd.extend(["--bake-texture", "--texture-resolution", "1024"])
+    else:
+        print("    -> Mode is Static: Using Vertex Colors (No Baking). Fast generation.")
+
+    try:
+        subprocess.run(tripo_cmd, cwd=TRIPO_DIR, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error in Stage 1 (TripoSR): {e}")
+        return
     
     # Name of the generated file (TripoSR outputs 'mesh.obj')
-    generated_obj = os.path.join(OUTPUT_DIR, "0", "mesh.obj")
+    generated_obj = os.path.join(abs_output_dir, "0", "mesh.obj")
 
     if not os.path.exists(generated_obj):
-        raise ValueError("Check the path storing the generated mesn.obj")
+        print(f"Check the path storing the generated mesh.obj")
+        return
 
     print(f">>> Stage 2: Processing {generated_obj} in Blender...")
 
-    # Construct the Blender command:
-    # -b : Run in background mode (no UI)
-    # -P : Run the specified Python script
-    # -- : Pass arguments after this flag to the Python script
-    blender_args = [
+    final_output_name = f"asset_{mode}.glb"
+    final_output_path = os.path.join(abs_output_dir, final_output_name)
+    
+    blender_cmd = [
         BLENDER_EXE,
-        "--background",
-        "--python", BLENDER_SCRIPT,
-        "--",
-        generated_obj, # Argument 1 for blender script
-        os.path.join(OUTPUT_DIR, "final_asset.glb") # Argument 2 for blender script
+        "--background",                 
+        "--python", BLENDER_SCRIPT,     
+        "--",                           
+        "--input", generated_obj,
+        "--output", final_output_path,
+        "--mode", mode                  
     ]
     
-    subprocess.run(blender_args, check=True)
+    try:
+        subprocess.run(blender_cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error in Stage 2 (Blender): {e}")
     
     print(">>> Pipeline Finished!")
 
 
 if __name__ == "__main__":
-    run_pipeline()
+    parser = argparse.ArgumentParser(description="Automated AI-to-3D Pipeline")
+    
+    parser.add_argument("image", help="Path to the input image file")
+    parser.add_argument("--output", default="./output", help="Directory to save output")
+    parser.add_argument("--mode", choices=["static", "animatable"], default="static", 
+                        help="Choose pipeline mode: 'static' (Props) or 'animatable' (Characters)")
+
+    args = parser.parse_args()
+
+    run_pipeline(args.image, args.output, args.mode)
