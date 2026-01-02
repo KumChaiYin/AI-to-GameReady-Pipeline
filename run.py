@@ -16,7 +16,7 @@ BLENDER_EXE = os.getenv("BLENDER_PATH")
 if not BLENDER_EXE:
     raise ValueError("Please set BLENDER_PATH in your .env file")
 
-def run_pipeline(input_image_path, output_dir, mode):
+def run_pipeline(input_image_path, output_dir, mode, verbose=False):
     abs_input_img = os.path.abspath(input_image_path)
     abs_output_dir = os.path.abspath(output_dir)
 
@@ -64,6 +64,9 @@ def run_pipeline(input_image_path, output_dir, mode):
         "--output", final_output_path,
         "--mode", mode                  
     ]
+
+    if verbose:
+        blender_cmd.append("--verbose")
     
     try:
         subprocess.run(blender_cmd, check=True)
@@ -81,6 +84,8 @@ if __name__ == "__main__":
     parser.add_argument("--mode", choices=["static", "animatable"], default="static", 
                         help="Choose pipeline mode: 'static' (Props) or 'animatable' (Characters)")
 
+    parser.add_argument("--verbose", action="store_true", help="Enable detailed logging for debugging")
+
     args = parser.parse_args()
 
-    run_pipeline(args.image, args.output, args.mode)
+    run_pipeline(args.image, args.output, args.mode, args.verbose)

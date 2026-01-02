@@ -1,5 +1,6 @@
 import bpy
 import os
+from tools.common import suppress_output
 
 # --- STATIC PIPELINE TOOLS ---
 def transfer_vertex_colors(target, source):
@@ -120,23 +121,25 @@ def bake_textures(target, source):
     # --- Bake Color ---
     print(">>> Baking Color...")
     target_mat.node_tree.nodes.active = tex_image_node
-    bpy.ops.object.bake(
-        type='DIFFUSE', 
-        pass_filter={'COLOR'}, 
-        use_selected_to_active=True, 
-        cage_extrusion=0.03,
-        target='IMAGE_TEXTURES'
-    )
+    with suppress_output():
+        bpy.ops.object.bake(
+            type='DIFFUSE', 
+            pass_filter={'COLOR'}, 
+            use_selected_to_active=True, 
+            cage_extrusion=0.03,
+            target='IMAGE_TEXTURES'
+        )
     
     # --- Bake Normal ---
     print(">>> Baking Normal...")
     target_mat.node_tree.nodes.active = tex_normal_node
-    bpy.ops.object.bake(
-        type='NORMAL', 
-        use_selected_to_active=True, 
-        cage_extrusion=0.03,
-        target='IMAGE_TEXTURES'
-    )
+    with suppress_output():
+        bpy.ops.object.bake(
+            type='NORMAL', 
+            use_selected_to_active=True, 
+            cage_extrusion=0.03,
+            target='IMAGE_TEXTURES'
+        )
     
     # 4. Link Nodes for Export
     target_mat.node_tree.links.new(tex_image_node.outputs["Color"], target_bsdf.inputs["Base Color"])

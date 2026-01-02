@@ -2,6 +2,7 @@ import bpy
 import sys
 import os
 import argparse
+import logging
 
 # 1. LOAD TOOLS
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -20,13 +21,15 @@ def get_args():
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--mode", choices=["static", "animatable"], required=True)
-    # # Optional texture arg for animatable mode
-    # parser.add_argument("--texture", required=False) 
+
+    parser.add_argument("--verbose", action="store_true", help="Enable detailed logging for debugging")
+
     return parser.parse_args(argv)
 
 # 3. MAIN PIPELINE
 def main():
     args = get_args()
+    common.set_verbose(args.verbose)
     
     # A. Setup
     common.clean_scene()

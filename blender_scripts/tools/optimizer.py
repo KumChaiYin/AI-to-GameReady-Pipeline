@@ -1,4 +1,5 @@
 import bpy
+from tools.common import suppress_output
 
 def optimize_static(obj, ratio=0.1):
     """Pipeline for Static Props (Decimate)."""
@@ -9,25 +10,28 @@ def optimize_static(obj, ratio=0.1):
     print(f">>> Optimizing Static Mesh: {obj.name}")
     
     # 1. Pre-Cleanup
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.remove_doubles(threshold=0.001)
-    bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
+    with suppress_output():
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.remove_doubles(threshold=0.001)
+        bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
     
     # 2. Decimate
     bpy.ops.object.mode_set(mode='OBJECT')
     mod = obj.modifiers.new(name="Decimate", type='DECIMATE')
     mod.ratio = ratio
-    bpy.ops.object.modifier_apply(modifier="Decimate")
+    with suppress_output():
+        bpy.ops.object.modifier_apply(modifier="Decimate")
     
     # 3. Post-Cleanup (Fix Invalid Mesh)
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.remove_doubles(threshold=0.001)
-    bpy.ops.mesh.delete_loose()
-    bpy.ops.mesh.dissolve_degenerate(threshold=0.0001)
-    bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
-    bpy.ops.mesh.normals_make_consistent(inside=False)
+    with suppress_output():
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.remove_doubles(threshold=0.001)
+        bpy.ops.mesh.delete_loose()
+        bpy.ops.mesh.dissolve_degenerate(threshold=0.0001)
+        bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
+        bpy.ops.mesh.normals_make_consistent(inside=False)
     
     # 4. Validation
     bpy.ops.object.mode_set(mode='OBJECT')
@@ -52,9 +56,10 @@ def optimize_animatable(obj, voxel_size=0.005, target_faces=10000):
     bpy.ops.mesh.select_mode(type="VERT")
     bpy.ops.mesh.select_all(action='SELECT')
 
-    bpy.ops.mesh.remove_doubles(threshold=0.001)
-    bpy.ops.mesh.fill_holes(sides=0) 
-    bpy.ops.mesh.delete_loose()
+    with suppress_output():
+        bpy.ops.mesh.remove_doubles(threshold=0.001)
+        bpy.ops.mesh.fill_holes(sides=0) 
+        bpy.ops.mesh.delete_loose()
 
     # Normalize normals to help Quadriflow
     bpy.ops.mesh.normals_make_consistent(inside=False)
@@ -67,13 +72,14 @@ def optimize_animatable(obj, voxel_size=0.005, target_faces=10000):
     
     try:
         # We capture the return set. If it doesn't contain 'FINISHED', it failed.
-        ret = bpy.ops.object.quadriflow_remesh(
-            use_preserve_sharp=True,
-            use_preserve_boundary=True, 
-            use_mesh_symmetry=False, 
-            mode='FACES', 
-            target_faces=target_faces
-        )
+        with suppress_output():
+            ret = bpy.ops.object.quadriflow_remesh(
+                use_preserve_sharp=True,
+                use_preserve_boundary=True, 
+                use_mesh_symmetry=False, 
+                mode='FACES', 
+                target_faces=target_faces
+            )
         if 'FINISHED' in ret:
             quadriflow_success = True
     except Exception as e:
