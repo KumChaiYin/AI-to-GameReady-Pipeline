@@ -1,4 +1,4 @@
-# AI-to-3D Asset Pipeline
+# AI-to-GameReady Asset Pipeline
 
 An automated pipeline that generates 3D models from 2D images using **TripoSR** and optimizes them using **Blender**.
 
@@ -18,7 +18,7 @@ This project has been developed and tested under the following environment. Usag
 
 * **OS:** Windows 11
 * **Python:** 3.10
-* **Blender:** Version 5.0+
+* **Blender:** 4.x / 5.0+ (tested on 5.0)
 * **GPU:** NVIDIA GPU with **CUDA 11.8** installed.
     * *Note:* Newer CUDA versions (12.x) may fail to compile `torchmcubes` due to missing NVTX headers on Windows.
 
@@ -26,8 +26,8 @@ This project has been developed and tested under the following environment. Usag
 
 ### 1. Clone the Repo
 ```bash
-git clone [https://github.com/yourusername/your-repo.git](https://github.com/yourusername/your-repo.git)
-cd your-repo
+git clone https://github.com/KumChaiYin/AI-to-GameReady-Pipeline.git
+cd AI-to-GameReady-Pipeline
 
 ```
 
@@ -36,7 +36,7 @@ cd your-repo
 You must install the version of PyTorch that matches your CUDA Toolkit **before** installing other requirements.
 
 ```bash
-pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu118](https://download.pytorch.org/whl/cu118)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 ```
 
@@ -68,6 +68,7 @@ Run the pipeline using `run.py`.
 Best for background items, rocks, or hard-surface objects.
 
 ```bash
+# Example
 python run.py images/character.png --mode static
 
 ```
@@ -77,6 +78,7 @@ python run.py images/character.png --mode static
 Best for characters. Performs Voxel Remeshing, Quadriflow, and Texture Baking.
 
 ```bash
+# Example
 python run.py images/character.png --mode animatable
 
 ```
@@ -86,6 +88,7 @@ python run.py images/character.png --mode animatable
 If Blender fails, use verbose mode to see the internal logs:
 
 ```bash
+# Example
 python run.py images/character.png --mode animatable --verbose
 
 ```
@@ -93,7 +96,7 @@ python run.py images/character.png --mode animatable --verbose
 
 ## 🛠 Troubleshooting
 
-### "Failed to build installable wheels for torchmcubes"
+### 1. "Failed to build installable wheels for torchmcubes"
 
 This is a common error on Windows when the CUDA environment is not perfectly matched.
 
@@ -103,6 +106,6 @@ This is a common error on Windows when the CUDA environment is not perfectly mat
 2. If you are using **CUDA 12.x** and cannot downgrade, you may need to manually install the legacy NVTX headers or follow the fix detailed in this thread:
 * [TripoSR Issue #74: Installation Fix for CUDA 12.x](https://github.com/VAST-AI-Research/TripoSR/issues/74)
 
-### "Blender command not found"
+### 2. "Blender command not found"
 
 Check your `.env` file and ensure `BLENDER_PATH` points to the actual `blender.exe` file, not just the folder.
