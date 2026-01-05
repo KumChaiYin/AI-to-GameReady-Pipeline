@@ -4,6 +4,8 @@ An automated pipeline that generates 3D models from 2D images using **TripoSR** 
 
 The pipeline handles generation, geometry optimization (Decimation/Remeshing), UV unwrapping, and Texture Baking (Normal/Diffuse) automatically.
 
+![Pipeline Overview](images/pipeline.png)
+
 ## ✨ Features
 
 * **Two Optimization Modes:**
@@ -109,3 +111,9 @@ This is a common error on Windows when the CUDA environment is not perfectly mat
 ### 2. "Blender command not found"
 
 Check your `.env` file and ensure `BLENDER_PATH` points to the actual `blender.exe` file, not just the folder.
+
+## Acknowledgements
+
+* **Core 3D generation** powered by [TripoSR](https://github.com/VAST-AI-Research/TripoSR).
+* **Mesh processing** automated via [Blender Python API (bpy)](https://docs.blender.org/api/current/).
+* **Workflow conceptualization** inspired by the production standards outlined in [Kaedim's Case Study](https://www.kaedim3d.com/case-study/monopoly-go).
