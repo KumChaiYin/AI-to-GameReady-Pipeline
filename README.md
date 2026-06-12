@@ -28,7 +28,7 @@ This project has been developed and tested under the following environment. Usag
 
 ### 1. Clone the Repo
 ```bash
-git clone https://github.com/KumChaiYin/AI-to-GameReady-Pipeline.git
+git clone --recurse-submodules https://github.com/KumChaiYin/AI-to-GameReady-Pipeline.git
 cd AI-to-GameReady-Pipeline
 
 ```
@@ -70,7 +70,6 @@ Run the pipeline using `run.py`.
 Best for background items, rocks, or hard-surface objects.
 
 ```bash
-# Example
 python run.py images/character.png --mode static
 
 ```
@@ -80,7 +79,6 @@ python run.py images/character.png --mode static
 Best for characters. Performs Voxel Remeshing, Quadriflow, and Texture Baking.
 
 ```bash
-# Example
 python run.py images/character.png --mode animatable
 
 ```
@@ -90,7 +88,6 @@ python run.py images/character.png --mode animatable
 If Blender fails, use verbose mode to see the internal logs:
 
 ```bash
-# Example
 python run.py images/character.png --mode animatable --verbose
 
 ```
